@@ -34,7 +34,7 @@ class FEMesh:
         gmsh.initialize([])
         gmsh.model.add("plate_with_beam")
 
-        # Plate corner points and beam endpoints (mesh size 0.1 m)
+
         p1 = gmsh.model.geo.addPoint(0, 0, 0)
         p2 = gmsh.model.geo.addPoint(2, 0, 0)
         p3 = gmsh.model.geo.addPoint(2, 2, 0)
@@ -56,8 +56,10 @@ class FEMesh:
         beam_line = gmsh.model.geo.addLine(pb1, pb2)
 
         gmsh.model.geo.synchronize()
+
         # Uniform mesh size of 0.1 m
         gmsh.model.mesh.setSize(gmsh.model.getEntities(0), 0.1)
+
         # Embed the beam into the surface so they share nodes
         gmsh.model.mesh.embed(1, [beam_line], 2, surface)
         gmsh.model.geo.synchronize()
@@ -114,6 +116,7 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
 
     from PySide6 import QtWidgets
     from PySide6.QtCore import Qt
+
     from PySide6.QtOpenGLWidgets import QOpenGLWidget
     from OpenGL.GL import (
         glBegin,
@@ -146,10 +149,12 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
         def __init__(self, mesh: FEMesh):
             super().__init__()
             self.mesh = mesh
+
             self.angle_x = 20.0
             self.angle_y = 20.0
             self.distance = 6.0
             self._last_pos = None
+n
 
         def initializeGL(self):  # pragma: no cover - requires OpenGL context
             glClearColor(1.0, 1.0, 1.0, 1.0)
@@ -166,9 +171,11 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
             glMatrixMode(GL_MODELVIEW)
             glLoadIdentity()
+
             glTranslatef(0.0, 0.0, -self.distance)
             glRotatef(self.angle_x, 1.0, 0.0, 0.0)
             glRotatef(self.angle_y, 0.0, 1.0, 0.0)
+
 
             # Draw plate triangles
             glColor3f(0.6, 0.6, 0.8)
@@ -190,6 +197,7 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
             glEnd()
             glFlush()
 
+
         # Basic mouse interaction for rotation and zoom
         def mousePressEvent(self, event):  # pragma: no cover - GUI interaction
             self._last_pos = event.position()
@@ -207,6 +215,7 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
             self.distance -= event.angleDelta().y() / 240.0
             self.distance = max(1.0, self.distance)
             self.update()
+
 
     class MainWindow(QtWidgets.QMainWindow):
         def __init__(self, mesh: FEMesh):  # pragma: no cover - GUI setup
