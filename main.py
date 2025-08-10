@@ -4,6 +4,9 @@ from __future__ import annotations
 import sys
 import argparse
 
+import re
+
+
 import numpy as np
 
 try:
@@ -106,12 +109,73 @@ class FEMesh:
 
 
 
+def beam_section_wireframe(
+    length: float = 2.0, section: str = "T300x12_100x10"
+) -> np.ndarray:
+    """Return line segments for a T-section beam extruded along *length*.
+
+    The *section* string is expected in the form ``TfwxfT_whxwt`` where the
+    dimensions are in millimetres (flange width, flange thickness, web height,
+    web thickness).
+    """
+
+    match = re.fullmatch(r"T(\d+)x(\d+)_(\d+)x(\d+)", section)
+    if not match:
+        raise ValueError("section format must be TfwxfT_whxwt")
+    fw, ft, wh, wt = map(float, match.groups())
+    fw /= 1000.0
+    ft /= 1000.0
+    wh /= 1000.0
+    wt /= 1000.0
+
+    half_fw = fw / 2.0
+    half_wt = wt / 2.0
+    top_web = wh
+    top_flange = wh + ft
+
+    # 2D polygon of the T-section in the local x-z plane
+    poly = np.array(
+        [
+            [-half_wt, 0.0],
+            [half_wt, 0.0],
+            [half_wt, top_web],
+            [half_fw, top_web],
+            [half_fw, top_flange],
+            [-half_fw, top_flange],
+            [-half_fw, top_web],
+            [-half_wt, top_web],
+        ],
+        dtype=float,
+    )
+
+    n = len(poly)
+    segments = []
+    # Bottom and top polygons
+    for i in range(n):
+        j = (i + 1) % n
+        p1 = poly[i]
+        p2 = poly[j]
+        segments.append([[p1[0] + 1.0, 0.0, p1[1]], [p2[0] + 1.0, 0.0, p2[1]]])
+        segments.append([[p1[0] + 1.0, length, p1[1]], [p2[0] + 1.0, length, p2[1]]])
+
+    # Vertical edges
+    for i in range(n):
+        p = poly[i]
+        segments.append(
+            [[p[0] + 1.0, 0.0, p[1]], [p[0] + 1.0, length, p[1]]]
+        )
+
+    return np.array(segments, dtype=float)
+
+
 
 # ---------------------------------------------------------------------------
 # Application entry point
 # ---------------------------------------------------------------------------
 
-def run_gui() -> None:  # pragma: no cover - requires GUI environment
+
+def run_gui(show_mesh: bool, beam_section: str) -> None:  # pragma: no cover - requires GUI env
+
     """Launch the PySide6 viewer with OpenGL rendering."""
 
     from PySide6 import QtWidgets
@@ -144,17 +208,20 @@ def run_gui() -> None:  # pragma: no cover - requires GUI environment
     from OpenGL.GLU import gluPerspective
 
     class GLWidget(QOpenGLWidget):
-        """Simple OpenGL widget to render the mesh."""
 
-        def __init__(self, mesh: FEMesh):
+        """Simple OpenGL widget to render the mesh and beam."""
+
+        def __init__(self, mesh: FEMesh, show_mesh: bool, section: str):
             super().__init__()
             self.mesh = mesh
+            self.show_mesh = show_mesh
+            self.beam_segments = beam_section_wireframe(section=section)
 
             self.angle_x = 20.0
             self.angle_y = 20.0
             self.distance = 6.0
             self._last_pos = None
-n
+
 
         def initializeGL(self):  # pragma: no cover - requires OpenGL context
             glClearColor(1.0, 1.0, 1.0, 1.0)
@@ -177,23 +244,23 @@ n
             glRotatef(self.angle_y, 0.0, 1.0, 0.0)
 
 
-            # Draw plate triangles
-            glColor3f(0.6, 0.6, 0.8)
-            glBegin(GL_TRIANGLES)
-            for tri in self.mesh.triangles:
-                for idx in tri:
-                    x, y, z = self.mesh.coords[idx]
-                    glVertex3f(x, y, z)
-            glEnd()
+            # Draw plate triangles if requested
+            if self.show_mesh:
+                glColor3f(0.6, 0.6, 0.8)
+                glBegin(GL_TRIANGLES)
+                for tri in self.mesh.triangles:
+                    for idx in tri:
+                        x, y, z = self.mesh.coords[idx]
+                        glVertex3f(x, y, z)
+                glEnd()
 
-            # Draw beam lines
+            # Draw beam wireframe
             glColor3f(0.8, 0.1, 0.1)
-            glLineWidth(3.0)
+            glLineWidth(2.0)
             glBegin(GL_LINES)
-            for line in self.mesh.lines:
-                for idx in line:
-                    x, y, z = self.mesh.coords[idx]
-                    glVertex3f(x, y, z)
+            for seg in self.beam_segments:
+                glVertex3f(*seg[0])
+                glVertex3f(*seg[1])
             glEnd()
             glFlush()
 
@@ -222,7 +289,9 @@ n
             super().__init__()
             self.setWindowTitle("FEA Plate with Beam")
             self.setGeometry(100, 100, 800, 600)
-            self.widget = GLWidget(mesh)
+
+            self.widget = GLWidget(mesh, show_mesh, beam_section)
+
             self.setCentralWidget(self.widget)
 
     mesh = FEMesh.plate_with_beam()
@@ -247,9 +316,23 @@ if __name__ == "__main__":
         action="store_true",
         help="only generate the mesh and print information",
     )
+
+    parser.add_argument(
+        "--mesh",
+        action="store_true",
+        help="visualize mesh triangles in the viewer",
+    )
+    parser.add_argument(
+        "--beam-section",
+        default="T300x12_100x10",
+        help="beam section as TfwxfT_whxwt in mm",
+    )
+
     args = parser.parse_args()
 
     if args.test:
         run_test()
     else:
-        run_gui()
+
+        run_gui(args.mesh, args.beam_section)
+
